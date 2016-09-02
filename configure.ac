@@ -31,6 +31,8 @@ AC_SUBST(TC_VERSION_MINOR)
 AC_SUBST(TC_VERSION_PATCH)
 AC_SUBST(PACKAGE_STRING)
 
+AX_GENERATE_CHANGELOG
+
 # The user can choose not to compile in the heap-profiler, the
 # heap-checker, or the cpu-profiler.  There's also the possibility
 # for a 'fully minimal' compile, which leaves out the stacktrace
@@ -51,8 +53,8 @@ case "$host" in
    *-darwin*) default_enable_heap_checker=no;;
 esac
 
-# Currently only backtrace works on s390x.
-AC_COMPILE_IFELSE([AC_LANG_PROGRAM(, [return __s390x__])],
+# Currently only backtrace works on s390.
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM(, [return __s390__])],
                   [default_enable_libunwind=no
                    default_enable_backtrace=yes],
                   [default_enable_libunwind=yes
@@ -453,16 +455,6 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([#if defined(__GNUC__) && ((__GNUC__ < 4) || (__
                           Define to 1 if compiler supports __thread)
                 AC_MSG_RESULT([yes])],
                [AC_MSG_RESULT([no])])
-
-# glibc's __malloc_hook/etc were declared volatile starting in glibc 2.14
-AC_MSG_CHECKING([if __malloc_hook is declared volatile])
-AC_COMPILE_IFELSE([AC_LANG_PROGRAM([#include <malloc.h>
-void* (* volatile __malloc_hook)(size_t, const void*) = 0;],)],
-                  [AC_DEFINE(MALLOC_HOOK_MAYBE_VOLATILE, volatile,
-                             Define to 'volatile' if __malloc_hook is declared volatile)
-                   AC_MSG_RESULT([yes])],
-                  [AC_DEFINE(MALLOC_HOOK_MAYBE_VOLATILE, )
-                   AC_MSG_RESULT([no])])
 
 # Nanosleep requires extra libraries on some architectures (solaris).
 # This sets NANOSLEEP_LIBS.  nanosleep doesn't exist on mingw, which
