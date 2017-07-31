@@ -4,11 +4,11 @@
 # make sure we're interpreted by some minimal autoconf
 AC_PREREQ([2.59])
 
-AC_INIT([gperftools],[2.5],[gperftools@googlegroups.com])
+AC_INIT([gperftools],[2.6.1],[gperftools@googlegroups.com])
 # Update this value for every release!  (A:B:C will map to foo.so.(A-C).C.B)
 # http://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
-TCMALLOC_SO_VERSION=7:0:3
-PROFILER_SO_VERSION=4:8:4
+TCMALLOC_SO_VERSION=8:5:4
+PROFILER_SO_VERSION=4:14:4
 
 AC_SUBST(TCMALLOC_SO_VERSION)
 AC_SUBST(PROFILER_SO_VERSION)
@@ -165,6 +165,22 @@ AC_PROG_LIBTOOL
 AC_C_INLINE
 AX_C___ATTRIBUTE__
 
+AC_MSG_CHECKING(for __attribute__((aligned(N))) on functions)
+AC_CACHE_VAL(ac_cv___attribute__aligned_fn, [
+  AC_TRY_COMPILE(
+    [#include <stdlib.h>
+     void foo(void) __attribute__((aligned(128)));
+     void foo(void) { exit(1); }],
+    [],
+    ac_cv___attribute__aligned_fn=yes,
+    ac_cv___attribute__aligned_fn=no
+  )])
+if test "$ac_cv___attribute__aligned_fn" = "yes"; then
+  AC_DEFINE(HAVE___ATTRIBUTE__ALIGNED_FN, 1, [define if your compiler supports alignment of functions])
+fi
+AC_MSG_RESULT($ac_cv___attribute__aligned_fn)
+
+
 # Check whether some low-level functions/files are available
 AC_HEADER_STDC
 
@@ -262,17 +278,14 @@ fi
 # Some tests test the behavior of .so files, and only make sense for dynamic.
 AM_CONDITIONAL(ENABLE_STATIC, test "$enable_static" = yes)
 
-# We want to link in libunwind or libexecinfo if it it is enabled and exists.
+# We want to link in libunwind if it is enabled and exists.
+UNWIND_LIBS=
 if test "$enable_libunwind" = yes; then
-  AC_CHECK_HEADERS(libunwind.h)   # for stacktrace
-  AC_CHECK_LIB(unwind, backtrace, UNWIND_LIBS=-lunwind,
-               [AC_CHECK_LIB(execinfo, backtrace, UNWIND_LIBS=-lexecinfo, UNWIND_LIBS=)])
-  AC_SUBST(UNWIND_LIBS)
-  will_use_libunwind=yes
-else
-  AC_CHECK_LIB(execinfo, backtrace, UNWIND_LIBS=-lexecinfo, UNWIND_LIBS=)
-  AC_SUBST(UNWIND_LIBS)
+  AC_CHECK_HEADERS([libunwind.h],
+                   [AC_CHECK_LIB(unwind, backtrace, UNWIND_LIBS=-lunwind)
+                    will_use_libunwind=yes])
 fi
+AC_SUBST(UNWIND_LIBS)
 
 # On x86_64, instead of libunwind, we can choose to compile with frame-pointers.
 AC_ARG_ENABLE(frame_pointers,
@@ -358,9 +371,11 @@ AC_CACHE_CHECK([if C++ compiler supports -fsized-deallocation],
                [AC_LANG_PUSH(C++)
                 OLD_CXXFLAGS="$CXXFLAGS"
                 CXXFLAGS="$CXXFLAGS -fsized-deallocation"
-                AC_COMPILE_IFELSE([AC_LANG_PROGRAM(,)],
-                                  perftools_cv_sized_deallocation_result=yes,
-                                  perftools_cv_sized_deallocation_result=no)
+                AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
+                    [[#include <new>]],
+                    [[(::operator delete)(0, 256)]])],
+                 perftools_cv_sized_deallocation_result=yes,
+                 perftools_cv_sized_deallocation_result=no)
                 CXXFLAGS="$OLD_CXXFLAGS"
                 AC_LANG_POP(C++)])
 
@@ -518,6 +533,11 @@ esac
 
 if test "x$enable_backtrace" = xyes; then
   AC_CHECK_DECLS([backtrace], [], [], [#include <execinfo.h>])
+  save_LIBS=$LIBS
+  LIBS=$UNWIND_LIBS
+  AC_SEARCH_LIBS([backtrace], [execinfo])
+  UNWIND_LIBS=$LIBS
+  LIBS=$save_LIBS
 fi
 
 # For windows, this has a non-trivial value (__declspec(export)), but any
@@ -601,7 +621,7 @@ AC_OUTPUT
 
 AS_IF([test "$x86_no_fp_by_default" = yes && test "x$enable_frame_pointers" != xyes && test "x$UNWIND_LIBS" = x && test "x$enable_minimal" != xyes],
   [AS_IF([test "x$perftools_cv_have_unwind_backtrace" = xyes],
-    [AC_MSG_WARN([No frame pointers and no libunwind. Using experimental backtrace capturing via libgcc])],
+    [AC_MSG_WARN([No frame pointers and no libunwind. Using experimental backtrace capturing via libgcc. Expect crashy cpu profiler.])],
     [AS_IF([test "x$enable_backtrace" = xyes],
-      [AC_MSG_WARN([No frame pointers and no libunwind.  Using experimental backtrace()])],
+      [AC_MSG_WARN([No frame pointers and no libunwind.  Using experimental backtrace(). Expect crashy cpu profiler.])],
       [AC_MSG_FAILURE([No frame pointers and no libunwind. The compilation will fail])])])])
